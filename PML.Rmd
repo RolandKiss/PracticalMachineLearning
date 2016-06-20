@@ -1,0 +1,168 @@
+Reproducible Research Assignment - Activity Monitoring
+===
+
+---
+title: "Practical Machine Learning Assignment"
+author: "Roland Kiss"
+date: "June 18, 2016"
+output: html_document
+---
+
+This is an R Markdown document aiming to make predictions on the manner in which people are exercising based on the  Weight Lifting Exercise Dataset (http://groupware.les.inf.puc-rio.br/har). 
+The document includes the following sections:
+
+- Section 1: Code for opening the data and the relevant packages
+- Section 2: Building a machine learning model using prediction trees
+- Section 3: Building a machine learning model using linear discriminant analysis
+- Section 4: Building a machine learning model using boosting method on prediction trees
+- Section 5: Choosing the most accurate prediction model and using it on the tesing (validation) dataset
+
+
+Section 1: Code for opening the data and the relevant packages
+
+The below code assumes that the training and testing datasets are saved into the working directory of the user.
+
+```{r}
+# Retrieving session info to ensure better reproducibility
+sessionInfo()
+
+# Loading relevant R packages for building prediction models
+library(caret)
+library(ggplot2)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(MASS)
+
+
+# Set seed to ensure better reproducibility
+set.seed(1248)
+
+# Loading the training and testing data sets from the working directory
+training<-read.csv("pml-training.csv", na.strings = c("NA",""))
+testing<-read.csv("pml-testing.csv", na.strings = c("NA",""))
+
+#Subset the training dataset to a training and a testing subset
+InTrain<-createDataPartition(training$classe,p=0.7,list=FALSE)
+trainingtrain<-training[InTrain,]
+trainingtest<-training[-InTrain,]
+
+```
+
+Covariate Analysis to determine the most relevant predictors:
+
+```{r}
+
+# create a matrix evaluating predictors based on how complete they are (no "NA" values) as well as being non-zero variance variables
+x<-matrix(nrow=160,ncol=2)
+for (i in 1:160) {x[i,1]<-colnames(trainingtrain)[i]}
+for (i in 1:160) {x[i,2]<-dim(subset(trainingtrain,complete.cases(trainingtrain[,i])==TRUE))[1]}
+nsv<-nearZeroVar(trainingtrain,saveMetrics = TRUE)
+dmatrix<-data.frame(x[,1],x[,2],nsv[,4],nsv[,1])
+
+# Subset the list of variables for those which are complete and non-zero varaince
+predlist<-subset(dmatrix,dmatrix[,2]==13737 & dmatrix[,3]==FALSE)
+
+
+```
+
+
+```{r}
+# Subset the training and testing dataset only including the relevant variables
+trainingtrain<-trainingtrain[,colnames(trainingtrain) %in% predlist[,1]]
+trainingtest<-trainingtest[,colnames(trainingtest) %in% predlist[,1]]
+testing<-testing[,colnames(testing) %in% predlist[,1]]
+
+```
+
+Section 2: Building a machine learning model using prediction trees
+
+```{r}
+# Configuring the prediction tree model on the training data set 
+mod1<-train(classe~.-X-user_name-raw_timestamp_part_1-raw_timestamp_part_2-cvtd_timestamp-num_window,method="rpart",data=trainingtrain)
+
+# Using the predition tree model on the testing data set
+pred1<-predict(mod1,trainingtest)
+
+# Create a dendogram to showcase model logic
+fancyRpartPlot(mod1$finalModel)
+
+# Create table to showcase prediction accuracy on the trainingtest subset
+res1<-data.frame(pred1,actual=trainingtest$classe)
+table(res1$pred1,res1$actual)
+
+
+```
+
+
+Section 3: Building a machine learning model using linear discriminant analysis
+
+```{r}
+# Configuring the linear discriminant analysis model on the training data set 
+mod2<-train(classe~.-X-user_name-raw_timestamp_part_1-raw_timestamp_part_2-cvtd_timestamp-num_window,method="lda",data=trainingtrain)
+
+# Using the predition tree model on the testing data set
+pred2<-predict(mod2,trainingtest)
+
+# Create table to showcase prediction accuracy on the trainingtest subset
+res2<-data.frame(pred2,actual=trainingtest$classe)
+table(res2$pred2,res2$actual)
+
+```
+
+Section 4: Building a machine learning model using boosting method using prediction tree
+
+```{r}
+# Configuring the linear discriminant analysis model on the training data set 
+mod3<-train(classe~.-X-user_name-raw_timestamp_part_1-raw_timestamp_part_2-cvtd_timestamp-num_window,method="gbm",data=trainingtrain,verbose=FALSE)
+
+# Using the predition tree model on the testing data set
+pred3<-predict(mod3,trainingtest)
+
+# Create table to showcase prediction accuracy on the trainingtest subset
+res3<-data.frame(pred3,actual=trainingtest$classe)
+table(res3$pred3,res3$actual)
+
+```
+
+
+Section 5: Choosing the most accurate prediction model and using it on the tesing (validation) dataset
+
+To make a decision regarding the models to use for the forecasting we are looking at the ConfusionMatrix-es of each of the three models built so far.
+
+```{r}
+# Confusion matrix of the prediction tree model
+confusionMatrix(pred1,trainingtest$classe)
+
+# Confusion matrix of the linear discriminate analysis model
+confusionMatrix(pred2,trainingtest$classe)
+
+# Confusion matrix of the boosted tree model
+confusionMatrix(pred3,trainingtest$classe)
+
+```
+
+Based on the accuracy revealed by the ConfusionMatrix it is visible that the model with the highest accuracy is Model 3 using the boosting method on the prediction trees.
+
+Using the model to make predictions on the testing validation set the following results will be given.
+
+```{r}
+
+# Predicting the testing validation set "Classe" values using the 3rd model
+predreal<-predict(mod3,testing)
+
+# Printing prediction results 
+print(predreal)
+
+
+```
+
+
+
+References:
+
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+Read more: http://groupware.les.inf.puc-rio.br/har#ixzz4C440pU41
+
+
